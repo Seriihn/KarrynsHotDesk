@@ -47,11 +47,6 @@ Example Steam path:
 - This mod does not permanently teach these skills with normal global learning hooks.
 - If another mod heavily changes Receptionist skill logic or battle-log behavior, load order may matter.
 
-## Recent Fixes (1.4.1)
-
-- Switched to temporary receptionist-only skill activation.
-- Fixed incorrect charm log carry-over when using real `Kick Away` after charm actions.
-
 ## File in This Repo
 
 - `www/mods/KarrynsHotDesk.js`
