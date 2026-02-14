@@ -1,29 +1,57 @@
 # Karryn's Hot Desk
 
-Adds four Receptionist battle actions for Karryn:
+Karryn's Hot Desk is a gameplay mod for the **Receptionist battle** minigame in **Karryn's Prison**.
 
+It adds 4 extra actions:
 - `Charm Goblin (Pussy)`
 - `Charm Goblin (Anal)`
 - `Charm Goblin (Cunni)`
 - `Strip Down`
 
-## Version
+## Current Version
 
-- `1.4.0`
+- `1.4.1`
 
-## What it does
+## What Players Get
 
-- Creates three custom `Charm Goblin` skills that can target a goblin behind Karryn and force immediate receptionist sex by selected type (`Pussy`, `Anal`, or `Cunni`).
-- Creates a custom `Strip Down` skill that instantly removes Karryn's clothes and panties.
-- Builds all four skills from receptionist base skills at runtime.
-- Ensures Karryn learns all four skills automatically on:
-  - skill setup
-  - new game object creation
-  - save load extraction
-- Uses sex-type-specific Charm combat log replacements (`Pussy`, `Anal`, `Cunni`).
-- Chooses normal vs extreme Charm replacement text based on Karryn cock desire (`<= 100` normal, `> 100` extreme).
-- Replaces malformed `Karryn kicks Karryn away!` log lines in Charm flows with the selected Charm replacement text.
+- New receptionist-only goblin charm actions with direct sex-type choice.
+- A quick `Strip Down` action for receptionist flow.
+- Cleaner battle log text for charm outcomes.
+- No permanent skill-list pollution outside Receptionist battles.
 
-## Files
+## How It Works (Simple)
+
+- The mod creates custom skill data in memory when the game starts/loads.
+- The 4 modded actions are available to **Karryn only** and only during the **Receptionist battle** mode.
+- Outside Receptionist battles, these skills are not active.
+
+## Install
+
+1. Put `KarrynsHotDesk.js` into:
+   `Karryn's Prison/www/mods/`
+2. Make sure the mod is enabled in your mod list.
+3. Launch the game.
+
+Example Steam path:
+`D:\SteamLibrary\steamapps\common\Karryn's Prison\www\mods\KarrynsHotDesk.js`
+
+## In-Game Usage
+
+1. Start a Receptionist battle.
+2. Use one of the new `Charm Goblin (...)` actions to instantly start the chosen goblin interaction.
+3. Use `Strip Down` when you want to remove clothes and panties instantly.
+
+## Notes and Compatibility
+
+- Designed for the Receptionist minigame flow.
+- This mod does not permanently teach these skills with normal global learning hooks.
+- If another mod heavily changes Receptionist skill logic or battle-log behavior, load order may matter.
+
+## Recent Fixes (1.4.1)
+
+- Switched to temporary receptionist-only skill activation.
+- Fixed incorrect charm log carry-over when using real `Kick Away` after charm actions.
+
+## File in This Repo
 
 - `www/mods/KarrynsHotDesk.js`

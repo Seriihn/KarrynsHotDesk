@@ -1,5 +1,5 @@
 // #MODS TXT LINES:
-// {"name":"KarrynsHotDesk","status":true,"description":"Adds Receptionist actions: Charm Goblin (Pussy/Anal/Cunni) and Strip Down.","parameters":{"name":"KarrynsHotDesk","displayedName":"Karryn's Hot Desk","version":"1.4.0"}}
+// {"name":"KarrynsHotDesk","status":true,"description":"Adds Receptionist actions: Charm Goblin (Pussy/Anal/Cunni) and Strip Down.","parameters":{"name":"KarrynsHotDesk","displayedName":"Karryn's Hot Desk","version":"1.4.1"}}
 // #MODS TXT LINES END
 
 var KarrynsHotDesk = KarrynsHotDesk || {};
@@ -804,7 +804,8 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             }
 
             if (pendingKickLogReplacementLines > 0 && typeof text === 'string') {
-                if (/kicks .+ away/i.test(text)) {
+                // Only replace the malformed self-kick line from the charm proxy flow.
+                if (/Karryn\s+kicks\s+Karryn\s+away!/i.test(text)) {
                     pendingKickLogReplacementLines = 0;
                     pendingCharmLogReplacementReady = false;
                     originalAddText.call(this, pendingCharmLogReplacementText);
@@ -833,9 +834,15 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             var selfTargeted = action && typeof action.subject === 'function' && typeof action._targetIndex !== 'undefined' &&
                 action._targetIndex === action.subject().index();
 
+            // If this is a real Kick Away action (not charm proxy), clear stale charm replacement state.
+            if (isKickAwaySkill && isActorSubject && !currentActionIsCharm && !selfTargeted) {
+                pendingKickLogReplacementLines = 0;
+                pendingCharmLogReplacementReady = false;
+            }
+
             // In the malformed charm flow, the action resolves as Kick Away targeting Karryn herself.
             // Replace only that specific log line with the custom charm line.
-            if (isKickAwaySkill && isActorSubject && (selfTargeted || inCharmReplacementWindow || pendingCharmLogReplacementReady || currentActionIsCharm)) {
+            if (isKickAwaySkill && isActorSubject && (selfTargeted || currentActionIsCharm || (inCharmReplacementWindow && pendingCharmLogReplacementReady))) {
                 this.push('addText', pendingCharmLogReplacementText);
                 pendingCharmLogReplacementReady = false;
                 return;
@@ -866,11 +873,17 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         BattleManager.actionRemLines = function(lineType) {
             var kickLineId = (typeof KARRYN_LINE_RECEPTIONIST_KICK_AWAY !== 'undefined') ? KARRYN_LINE_RECEPTIONIST_KICK_AWAY : RECEPTIONIST_KICK_AWAY_LINE_ID;
             if (pendingKickLogReplacementLines > 0 && lineType === kickLineId) {
-                pendingKickLogReplacementLines = 0;
-                pendingCharmLogReplacementReady = false;
-                if (this._logWindow && typeof this._logWindow.displayRemLine === 'function') {
-                    this._logWindow.displayRemLine(pendingCharmLogReplacementText);
-                    return false;
+                var activeReplacement = getActiveCharmReplacementText();
+                if (activeReplacement) {
+                    pendingKickLogReplacementLines = 0;
+                    pendingCharmLogReplacementReady = false;
+                    if (this._logWindow && typeof this._logWindow.displayRemLine === 'function') {
+                        this._logWindow.displayRemLine(activeReplacement);
+                        return false;
+                    }
+                } else {
+                    pendingKickLogReplacementLines = 0;
+                    pendingCharmLogReplacementReady = false;
                 }
             }
             return originalActionRemLines.apply(this, arguments);
@@ -897,44 +910,53 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         $dataSkills[STRIP_DOWN_SKILL_ID] = stripSkill;
     };
 
-    var ensureSkillLearned = function(actor, skillId) {
-        if (!actor || typeof actor.learnSkill !== 'function') return;
-        if (typeof actor.isLearnedSkill === 'function' && actor.isLearnedSkill(skillId)) return;
-        if (Array.isArray(actor._skills) && actor._skills.indexOf(skillId) >= 0) return;
-        actor.learnSkill(skillId);
+    var isKarrynActor = function(actor) {
+        if (!actor) return false;
+        if (typeof actor.isActor !== 'function' || !actor.isActor()) return false;
+        if (typeof actor.actorId !== 'function') return false;
+        var karrynActorId = (typeof ACTOR_KARRYN_ID !== 'undefined') ? ACTOR_KARRYN_ID : 1;
+        return actor.actorId() === karrynActorId;
     };
 
-    var ensureCustomSkillsForKarryn = function() {
-        if (typeof $gameActors === 'undefined' || !$gameActors || typeof $gameActors.actor !== 'function') return;
-        var karrynActorId = typeof ACTOR_KARRYN_ID !== 'undefined' ? ACTOR_KARRYN_ID : 1;
-        var karrynActor = $gameActors.actor(karrynActorId);
-        ensureSkillLearned(karrynActor, CHARM_GOBLIN_PUSSY_SKILL_ID);
-        ensureSkillLearned(karrynActor, CHARM_GOBLIN_ANAL_SKILL_ID);
-        ensureSkillLearned(karrynActor, CHARM_GOBLIN_CUNNI_SKILL_ID);
-        ensureSkillLearned(karrynActor, STRIP_DOWN_SKILL_ID);
+    var isInReceptionistBattleContext = function() {
+        if (typeof $gameParty === 'undefined' || !$gameParty) return false;
+        return !!$gameParty.isInReceptionistBattle;
     };
 
-    var patchSkillLearning = function() {
+    var buildHotDeskTempSkillList = function() {
+        return [
+            CHARM_GOBLIN_PUSSY_SKILL_ID,
+            CHARM_GOBLIN_ANAL_SKILL_ID,
+            CHARM_GOBLIN_CUNNI_SKILL_ID,
+            STRIP_DOWN_SKILL_ID
+        ];
+    };
+
+    var patchTemporarySkillInjection = function() {
         if (typeof Game_Actor === 'undefined' || !Game_Actor.prototype) return;
-        if (typeof Game_Actor.prototype.setupSkills !== 'function') return;
+        if (typeof Game_Actor.prototype.addedSkills !== 'function') return;
+        if (Game_Actor.prototype._hotDeskAddedSkillsPatched) return;
+        Game_Actor.prototype._hotDeskAddedSkillsPatched = true;
 
-        var originalSetupSkills = Game_Actor.prototype.setupSkills;
-        Game_Actor.prototype.setupSkills = function() {
-            originalSetupSkills.apply(this, arguments);
-            installCharmGoblinSkillData();
-            installStripDownSkillData();
-            ensureSkillLearned(this, CHARM_GOBLIN_PUSSY_SKILL_ID);
-            ensureSkillLearned(this, CHARM_GOBLIN_ANAL_SKILL_ID);
-            ensureSkillLearned(this, CHARM_GOBLIN_CUNNI_SKILL_ID);
-            ensureSkillLearned(this, STRIP_DOWN_SKILL_ID);
+        var originalAddedSkills = Game_Actor.prototype.addedSkills;
+        Game_Actor.prototype.addedSkills = function() {
+            var result = originalAddedSkills.apply(this, arguments);
+            if (!Array.isArray(result)) result = [];
+            if (!isKarrynActor(this) || !isInReceptionistBattleContext()) return result;
+
+            var tempSkills = buildHotDeskTempSkillList();
+            for (var i = 0; i < tempSkills.length; i++) {
+                var skillId = tempSkills[i];
+                if (skillId > 0 && result.indexOf(skillId) < 0) result.push(skillId);
+            }
+            return result;
         };
 
         installCharmGoblinSkillData();
         installStripDownSkillData();
-        ensureCustomSkillsForKarryn();
     };
 
-    var patchSaveLoadLearning = function() {
+    var patchSaveLoadSkillDataInstall = function() {
         if (typeof DataManager === 'undefined') return;
 
         if (typeof DataManager.createGameObjects === 'function') {
@@ -943,7 +965,6 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 originalCreateGameObjects.apply(this, arguments);
                 installCharmGoblinSkillData();
                 installStripDownSkillData();
-                ensureCustomSkillsForKarryn();
             };
         }
 
@@ -953,7 +974,6 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 originalExtractSaveContents.apply(this, arguments);
                 installCharmGoblinSkillData();
                 installStripDownSkillData();
-                ensureCustomSkillsForKarryn();
             };
         }
     };
@@ -971,8 +991,8 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             patchBattleLogKickLineFilter();
             patchBattleLogDisplayAction();
             patchActionRemLinesReplacement();
-            patchSkillLearning();
-            patchSaveLoadLearning();
+            patchTemporarySkillInjection();
+            patchSaveLoadSkillDataInstall();
             debugLog('Receptionist action patches applied.');
         }
     } catch (err) {
