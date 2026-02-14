@@ -1,24 +1,28 @@
 # Karryn's Hot Desk
 
-Adds two Receptionist battle actions for Karryn:
+Adds four Receptionist battle actions for Karryn:
 
-- `Charm Goblin`
+- `Charm Goblin (Pussy)`
+- `Charm Goblin (Anal)`
+- `Charm Goblin (Cunni)`
 - `Strip Down`
 
 ## Version
 
-- `1.3.0`
+- `1.4.0`
 
 ## What it does
 
-- Creates a custom `Charm Goblin` skill that can target a goblin behind Karryn and force an immediate receptionist sex join.
+- Creates three custom `Charm Goblin` skills that can target a goblin behind Karryn and force immediate receptionist sex by selected type (`Pussy`, `Anal`, or `Cunni`).
 - Creates a custom `Strip Down` skill that instantly removes Karryn's clothes and panties.
-- Installs both custom skills from receptionist base skills at runtime.
-- Ensures Karryn learns both skills automatically:
-  - on skill setup
-  - on new game object creation
-  - after save load extraction
-- Patches battle/action/log flows so the charm action executes and displays custom text instead of malformed kick-away messaging.
+- Builds all four skills from receptionist base skills at runtime.
+- Ensures Karryn learns all four skills automatically on:
+  - skill setup
+  - new game object creation
+  - save load extraction
+- Uses sex-type-specific Charm combat log replacements (`Pussy`, `Anal`, `Cunni`).
+- Chooses normal vs extreme Charm replacement text based on Karryn cock desire (`<= 100` normal, `> 100` extreme).
+- Replaces malformed `Karryn kicks Karryn away!` log lines in Charm flows with the selected Charm replacement text.
 
 ## Files
 
