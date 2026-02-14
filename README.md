@@ -1,18 +1,17 @@
 # Karryn's Hot Desk
 
-Karryn's Hot Desk is a mod for the **Receptionist** minigame.
+Karryn's Hot Desk is a mod for the **Receptionist minigame**.
 
 ## Features
 
 - Adds `Charm Goblin (Pussy)`, `Charm Goblin (Anal)`, `Charm Goblin (Cunni)`, and `Strip Down`.
 - You get three separate `Charm Goblin` skills that let you instantly choose and start Pussy, Anal, or Cunni with a goblin behind Karryn.
 - `Strip Down` lets you remove skirt and panties in one action.
-- The modded skills are only present during Receptionist battles, so your normal skill lists stay unchanged outside that mode.
 - The mod adds new battle log messages for its custom skills.
 
 ## Skill Availability
 
-- They should only be available in **Receptionist battles**.
+- They should only be available in the **Receptionist minigame**.
 - `Charm Goblin (...)` appears when a valid goblin is behind Karryn and she is in a state that can start that interaction.
 - `Strip Down` appears when there is still clothing and/or panties left to remove.
 
