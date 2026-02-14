@@ -197,6 +197,14 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         return getCharmLogReplacementByType(lastSelectedCharmTypeKey, actor);
     };
 
+    var getLastSelectedCharmTypeForActor = function(actor) {
+        if (!lastSelectedCharmTypeKey) return '';
+        if (!actor || typeof actor.actorId !== 'function') return '';
+        var actorId = actor.actorId();
+        if (!actorId || actorId !== lastSelectedCharmActorId) return '';
+        return String(lastSelectedCharmTypeKey).toLowerCase();
+    };
+
     var resolveKickAwayReplacementText = function() {
         return getActiveCharmReplacementText() || getLastSelectedCharmReplacementText() || pendingCharmLogReplacementText;
     };
@@ -443,6 +451,26 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         return null;
     };
 
+    var clearCumFromActor = function(actor) {
+        if (!actor) return;
+        if (typeof BodyLiquidId !== 'undefined' && BodyLiquidId && typeof actor.getBodyLiquid === 'function') {
+            for (var liquidKey in BodyLiquidId) {
+                if (!Object.prototype.hasOwnProperty.call(BodyLiquidId, liquidKey)) continue;
+                if (String(liquidKey).indexOf('_SEMEN') < 0) continue;
+                var liquidId = BodyLiquidId[liquidKey];
+                var liquid = actor.getBodyLiquid(liquidId);
+                if (liquid && typeof liquid.reset === 'function') liquid.reset();
+            }
+            if (typeof actor.setCacheChanged === 'function') actor.setCacheChanged();
+            return;
+        }
+
+        // Fallback for older liquid systems without BodyLiquidId API.
+        if (typeof actor.resetLiquidsExceptPussyJuice === 'function') {
+            actor.resetLiquidsExceptPussyJuice();
+        }
+    };
+
     var tryCharmGoblinInstantSex = function(actor, goblin, forcedTypeKey) {
         if (!actor) return false;
 
@@ -465,7 +493,8 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         }
         var skillId = charmJoin.skillId;
 
-        pendingCharmLogReplacementText = getCharmLogReplacementByType(charmJoin.typeKey || forcedTypeKey || getCharmTypeByJoinSkillId(skillId), actor);
+        var resolvedTypeKey = charmJoin.typeKey || forcedTypeKey || getCharmTypeByJoinSkillId(skillId);
+        pendingCharmLogReplacementText = getCharmLogReplacementByType(resolvedTypeKey, actor);
         pendingCharmLogReplacementReady = true;
         pendingKickLogReplacementLines = 20;
         selectedGoblin.useAISkill(skillId, actor);
@@ -479,6 +508,9 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         actor.emoteReceptionistPose();
         if (typeof actor.updateReceptionistBattleGoblinTachie === 'function') {
             actor.updateReceptionistBattleGoblinTachie();
+        }
+        if (resolvedTypeKey === 'cunni') {
+            clearCumFromActor(actor);
         }
 
         debugLog(CHARM_ACTION_NAME + ' triggered instant sex join skill ' + String(skillId) + '.');
@@ -707,6 +739,9 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 if (lastSelectedCharmTypeKey && typeof this.subject === 'function') {
                     var subject = this.subject();
                     if (subject && typeof subject.actorId === 'function') lastSelectedCharmActorId = subject.actorId();
+                    pendingCharmLogReplacementText = getCharmLogReplacementByType(lastSelectedCharmTypeKey, subject);
+                    pendingCharmLogReplacementReady = true;
+                    if (pendingKickLogReplacementLines < 20) pendingKickLogReplacementLines = 20;
                 }
             };
         }
@@ -760,6 +795,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             var targetIsActor = target && typeof target.isActor === 'function' && target.isActor();
             if ((isCharmSkillItem(item) || targetIsActor) && typeof this.afterEval_receptionistBattle_charmGoblin === 'function') {
                 var forcedTypeKey = item && item._hotDeskCharmSkillType ? item._hotDeskCharmSkillType : '';
+                if (!forcedTypeKey) forcedTypeKey = getLastSelectedCharmTypeForActor(this);
                 if (forcedTypeKey === 'pussy' && typeof this.afterEval_receptionistBattle_charmGoblin_pussy === 'function') {
                     this.afterEval_receptionistBattle_charmGoblin_pussy(target || getAnyBehindGoblin());
                     return;
@@ -792,6 +828,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 var user = (typeof this.subject === 'function') ? this.subject() : null;
                 if (user) {
                     var forcedTypeKey = item && item._hotDeskCharmSkillType ? item._hotDeskCharmSkillType : '';
+                    if (!forcedTypeKey) forcedTypeKey = getLastSelectedCharmTypeForActor(user);
                     if (forcedTypeKey === 'pussy' && typeof user.afterEval_receptionistBattle_charmGoblin_pussy === 'function') {
                         user.afterEval_receptionistBattle_charmGoblin_pussy(getAnyBehindGoblin());
                         return;
