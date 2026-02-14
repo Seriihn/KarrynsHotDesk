@@ -24,7 +24,9 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
     var CHARM_ACTION_DESC = 'Target a goblin behind Karryn and instantly start receptionist sex.';
     var STRIP_ACTION_NAME = 'Strip Down';
     var STRIP_ACTION_DESC = "Instantly remove all of Karryn's clothes and panties.";
+    var STRIP_LOG_REPLACEMENT = "Karryn hurriedly removes her skirt and panties.";
     var pendingKickLogReplacementLines = 0;
+    var pendingStripLogReplacementLines = 0;
     var CHARM_LOG_REPLACEMENT_GENERIC = "Karryn charms a goblin behind her into immediate sex!";
     var CHARM_LOG_REPLACEMENT_PUSSY = "Karryn seduces a goblin behind her into instant pussy pounding!";
     var CHARM_LOG_REPLACEMENT_ANAL = "Karryn lures a goblin behind her into instant anal breeding!";
@@ -35,6 +37,8 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
     var CHARM_LOG_COCK_DESIRE_EXTREME_THRESHOLD = 100;
     var pendingCharmLogReplacementText = CHARM_LOG_REPLACEMENT_GENERIC;
     var pendingCharmLogReplacementReady = false;
+    var pendingStripLogReplacementReady = false;
+    var lastSelectedStripActorId = 0;
     var lastSelectedCharmTypeKey = '';
     var lastSelectedCharmActorId = 0;
 
@@ -77,6 +81,35 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
     var isCharmProxyKickAwayItem = function(item) {
         if (!item) return false;
         return pendingKickLogReplacementLines > 0 && item.id === RECEPTIONIST_KICK_AWAY_SKILL_ID;
+    };
+
+    var isStripSkillItem = function(item) {
+        if (!item) return false;
+        if (item.id === STRIP_DOWN_SKILL_ID) return true;
+        if (item._hotDeskStripSkill) return true;
+        if (item.name === STRIP_ACTION_NAME) return true;
+        if (typeof item.customAfterEval === 'string' && item.customAfterEval.indexOf('afterEval_receptionistBattle_stripDown') >= 0) {
+            return true;
+        }
+        return false;
+    };
+
+    var primePendingStripLogTextFromAction = function(actionItem) {
+        if (!isStripSkillItem(actionItem)) return;
+        pendingStripLogReplacementReady = true;
+        if (pendingStripLogReplacementLines < 12) pendingStripLogReplacementLines = 12;
+    };
+
+    var getActiveStripReplacementText = function() {
+        if (typeof BattleManager === 'undefined' || !BattleManager) return '';
+        var subject = BattleManager._subject || null;
+        if (!subject || typeof subject.isActor !== 'function' || !subject.isActor()) return '';
+        if (typeof subject.currentAction !== 'function') return '';
+        var action = subject.currentAction();
+        if (!action || typeof action.item !== 'function') return '';
+        var item = action.item();
+        if (!isStripSkillItem(item)) return '';
+        return STRIP_LOG_REPLACEMENT;
     };
 
     var getActorCockDesireValue = function(actor) {
@@ -656,6 +689,18 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             var originalSetSkill = Game_Action.prototype.setSkill;
             Game_Action.prototype.setSkill = function(skillId) {
                 originalSetSkill.apply(this, arguments);
+                if (skillId === STRIP_DOWN_SKILL_ID) {
+                    pendingStripLogReplacementReady = true;
+                    if (pendingStripLogReplacementLines < 20) pendingStripLogReplacementLines = 20;
+                    if (typeof this.subject === 'function') {
+                        var stripSubject = this.subject();
+                        if (stripSubject && typeof stripSubject.actorId === 'function') lastSelectedStripActorId = stripSubject.actorId();
+                    }
+                } else if (skillId !== RECEPTIONIST_FIX_CLOTHES_SKILL_ID) {
+                    pendingStripLogReplacementLines = 0;
+                    pendingStripLogReplacementReady = false;
+                }
+
                 if (skillId === CHARM_GOBLIN_PUSSY_SKILL_ID) lastSelectedCharmTypeKey = 'pussy';
                 else if (skillId === CHARM_GOBLIN_ANAL_SKILL_ID) lastSelectedCharmTypeKey = 'anal';
                 else if (skillId === CHARM_GOBLIN_CUNNI_SKILL_ID) lastSelectedCharmTypeKey = 'cunni';
@@ -817,6 +862,17 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
 
         var originalAddText = Window_BattleLog.prototype.addText;
         Window_BattleLog.prototype.addText = function(text) {
+            if (typeof text === 'string' && /Karryn\s+fixes\s+her\s+skirt/i.test(text)) {
+                var activeStripReplacement = getActiveStripReplacementText();
+                if (activeStripReplacement) {
+                    text = activeStripReplacement;
+                    pendingStripLogReplacementReady = true;
+                    if (pendingStripLogReplacementLines < 12) pendingStripLogReplacementLines = 12;
+                } else if (pendingStripLogReplacementLines > 0 || pendingStripLogReplacementReady) {
+                    text = STRIP_LOG_REPLACEMENT;
+                }
+            }
+
             if (typeof text === 'string' && /Karryn\s+kicks\s+Karryn\s+away!/i.test(text)) {
                 var replacementText = resolveKickAwayReplacementText();
                 if (replacementText) {
@@ -839,6 +895,16 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 }
                 pendingKickLogReplacementLines--;
             }
+
+            if (pendingStripLogReplacementLines > 0 && typeof text === 'string') {
+                if (/Karryn\s+fixes\s+her\s+skirt/i.test(text)) {
+                    pendingStripLogReplacementLines = 0;
+                    pendingStripLogReplacementReady = false;
+                    originalAddText.call(this, STRIP_LOG_REPLACEMENT);
+                    return;
+                }
+                pendingStripLogReplacementLines--;
+            }
             originalAddText.call(this, text);
         };
         Window_BattleLog.prototype.addText._hotDeskKickLineFilterWrapped = true;
@@ -855,10 +921,17 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             var action = isActorSubject && typeof subject.currentAction === 'function' ? subject.currentAction() : null;
             var currentActionItem = action && typeof action.item === 'function' ? action.item() : null;
             var currentActionIsCharm = isCharmSkillItem(currentActionItem);
+            var currentActionIsStrip = isStripSkillItem(currentActionItem);
             primePendingCharmLogTextFromAction(subject, currentActionItem);
+            primePendingStripLogTextFromAction(currentActionItem);
             var inCharmReplacementWindow = pendingKickLogReplacementLines > 0;
             var selfTargeted = action && typeof action.subject === 'function' && typeof action._targetIndex !== 'undefined' &&
                 action._targetIndex === action.subject().index();
+
+            if (isActorSubject && !isStripSkillItem(item) && !currentActionIsStrip) {
+                pendingStripLogReplacementLines = 0;
+                pendingStripLogReplacementReady = false;
+            }
 
             // If this is a real Kick Away action (not charm proxy), clear stale charm replacement state.
             if (isKickAwaySkill && isActorSubject && !currentActionIsCharm && !selfTargeted) {
@@ -881,6 +954,14 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             !(Window_BattleLog.prototype.displayRemLine && Window_BattleLog.prototype.displayRemLine._hotDeskDisplayRemLineWrapped)) {
             var originalDisplayRemLine = Window_BattleLog.prototype.displayRemLine;
             Window_BattleLog.prototype.displayRemLine = function(text) {
+                if (typeof text === 'string' && /Karryn\s+fixes\s+her\s+skirt/i.test(text)) {
+                    var stripReplacementText = getActiveStripReplacementText();
+                    if (stripReplacementText) {
+                        text = stripReplacementText;
+                    } else if (pendingStripLogReplacementLines > 0 || pendingStripLogReplacementReady) {
+                        text = STRIP_LOG_REPLACEMENT;
+                    }
+                }
                 if (typeof text === 'string' && /Karryn\s+kicks\s+Karryn\s+away!/i.test(text)) {
                     var replacementText = resolveKickAwayReplacementText();
                     if (replacementText) text = replacementText;
