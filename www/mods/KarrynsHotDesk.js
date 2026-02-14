@@ -515,8 +515,30 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             return true;
         };
 
+        Game_Actor.prototype.canUse_receptionistBattle_stripDown = function() {
+            var hasClothingLeft = true;
+            if (typeof this.isClothingMaxDamaged === 'function') {
+                hasClothingLeft = !this.isClothingMaxDamaged();
+            }
+
+            // Prefer direct internal state for panties because some builds return
+            // debug-gated values from isWearingPanties().
+            var hasPantiesLeft = false;
+            if (typeof this._wearingPanties === 'boolean') hasPantiesLeft = this._wearingPanties;
+            if (this._lostPanties === true) hasPantiesLeft = false;
+            if (!hasPantiesLeft && typeof this.isWearingPanties === 'function') {
+                try {
+                    hasPantiesLeft = !!this.isWearingPanties();
+                } catch (err) {
+                    hasPantiesLeft = false;
+                }
+            }
+
+            return hasClothingLeft || hasPantiesLeft;
+        };
+
         Game_Actor.prototype.customReq_receptionistBattle_stripDown = function() {
-            return true;
+            return this.canUse_receptionistBattle_stripDown();
         };
 
         Game_Actor.prototype.skillCost_receptionistBattle_stripDown = function() {
@@ -524,6 +546,10 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         };
 
         Game_Actor.prototype.afterEval_receptionistBattle_stripDown = function() {
+            if (typeof this.canUse_receptionistBattle_stripDown === 'function' && !this.canUse_receptionistBattle_stripDown()) {
+                this.resetSexSkillConsUsage(false);
+                return;
+            }
             if (typeof this.stripOffClothing === 'function') this.stripOffClothing();
             if (typeof this.stripOffPanties === 'function') this.stripOffPanties();
             this.resetSexSkillConsUsage(false);
