@@ -34,9 +34,11 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
     var CHARM_LOG_REPLACEMENT_PUSSY_EXTREME = "Karryn drags a goblin behind her into immediate, sloppy pussy sex!";
     var CHARM_LOG_REPLACEMENT_ANAL_EXTREME = "Karryn baits a goblin behind her into immediate rough anal sex!";
     var CHARM_LOG_REPLACEMENT_CUNNI_EXTREME = "Karryn orders a goblin behind her to eat her out on the spot!";
+    var CHARM_LOG_REPLACEMENT_CUNNI_CLEANUP = "Karryn quietly asks the goblin to lick her clean with his tongue.";
     var CHARM_LOG_COCK_DESIRE_EXTREME_THRESHOLD = 100;
     var pendingCharmLogReplacementText = CHARM_LOG_REPLACEMENT_GENERIC;
     var pendingCharmLogReplacementReady = false;
+    var pendingCharmLogReplacementLocked = false;
     var pendingStripLogReplacementReady = false;
     var lastSelectedStripActorId = 0;
     var lastSelectedCharmTypeKey = '';
@@ -137,10 +139,48 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         return getActorCockDesireValue(actor) > CHARM_LOG_COCK_DESIRE_EXTREME_THRESHOLD;
     };
 
+    var LOWER_BODY_SEMEN_LIQUID_KEYS = [
+        'PUSSY_SEMEN',
+        'ANAL_SEMEN',
+        'BUTT_TOP_LEFT_SEMEN',
+        'BUTT_TOP_RIGHT_SEMEN',
+        'BUTT_BOTTOM_LEFT_SEMEN',
+        'BUTT_BOTTOM_RIGHT_SEMEN',
+        'LEG_LEFT_SEMEN',
+        'LEG_RIGHT_SEMEN'
+    ];
+
+    var actorHasLowerBodySemen = function(actor) {
+        if (!actor) return false;
+        if (typeof BodyLiquidId !== 'undefined' && BodyLiquidId && typeof actor.getBodyLiquid === 'function') {
+            for (var i = 0; i < LOWER_BODY_SEMEN_LIQUID_KEYS.length; i++) {
+                var liquidKey = LOWER_BODY_SEMEN_LIQUID_KEYS[i];
+                if (!Object.prototype.hasOwnProperty.call(BodyLiquidId, liquidKey)) continue;
+                var liquid = actor.getBodyLiquid(BodyLiquidId[liquidKey]);
+                if (liquid && typeof liquid.amount === 'number' && liquid.amount > 0) return true;
+            }
+            return false;
+        }
+
+        // Legacy fallback: lower body only.
+        return !!(
+            Number(actor._liquidCreampiePussy || 0) > 0 ||
+            Number(actor._liquidCreampieAnal || 0) > 0 ||
+            Number(actor._liquidBukkakeButt || 0) > 0 ||
+            Number(actor._liquidBukkakeButtTopRight || 0) > 0 ||
+            Number(actor._liquidBukkakeButtTopLeft || 0) > 0 ||
+            Number(actor._liquidBukkakeButtBottomRight || 0) > 0 ||
+            Number(actor._liquidBukkakeButtBottomLeft || 0) > 0 ||
+            Number(actor._liquidBukkakeLeftLeg || 0) > 0 ||
+            Number(actor._liquidBukkakeRightLeg || 0) > 0
+        );
+    };
+
     var getCharmLogReplacementByType = function(typeKey, actor) {
         var extreme = isExtremeCharmLog(actor);
         if (typeKey === 'pussy') return extreme ? CHARM_LOG_REPLACEMENT_PUSSY_EXTREME : CHARM_LOG_REPLACEMENT_PUSSY;
         if (typeKey === 'anal') return extreme ? CHARM_LOG_REPLACEMENT_ANAL_EXTREME : CHARM_LOG_REPLACEMENT_ANAL;
+        if (typeKey === 'cunni' && actorHasLowerBodySemen(actor)) return CHARM_LOG_REPLACEMENT_CUNNI_CLEANUP;
         if (typeKey === 'cunni') return extreme ? CHARM_LOG_REPLACEMENT_CUNNI_EXTREME : CHARM_LOG_REPLACEMENT_CUNNI;
         return CHARM_LOG_REPLACEMENT_GENERIC;
     };
@@ -167,10 +207,14 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
     var primePendingCharmLogTextFromAction = function(subject, actionItem) {
         var typeKey = getCharmTypeByItem(actionItem);
         if (!typeKey) return;
+        if (pendingCharmLogReplacementLocked && pendingCharmLogReplacementReady && pendingKickLogReplacementLines > 0 && typeKey === lastSelectedCharmTypeKey) {
+            return;
+        }
         if (subject && typeof subject.actorId === 'function') lastSelectedCharmActorId = subject.actorId();
         lastSelectedCharmTypeKey = typeKey;
         pendingCharmLogReplacementText = getCharmLogReplacementByType(typeKey, subject);
         pendingCharmLogReplacementReady = true;
+        pendingCharmLogReplacementLocked = false;
         if (pendingKickLogReplacementLines < 20) pendingKickLogReplacementLines = 20;
     };
 
@@ -451,24 +495,47 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         return null;
     };
 
-    var clearCumFromActor = function(actor) {
+    var clearLowerBodyCumFromActor = function(actor) {
         if (!actor) return;
+        var hadCum = false;
         if (typeof BodyLiquidId !== 'undefined' && BodyLiquidId && typeof actor.getBodyLiquid === 'function') {
-            for (var liquidKey in BodyLiquidId) {
+            for (var i = 0; i < LOWER_BODY_SEMEN_LIQUID_KEYS.length; i++) {
+                var liquidKey = LOWER_BODY_SEMEN_LIQUID_KEYS[i];
                 if (!Object.prototype.hasOwnProperty.call(BodyLiquidId, liquidKey)) continue;
-                if (String(liquidKey).indexOf('_SEMEN') < 0) continue;
                 var liquidId = BodyLiquidId[liquidKey];
                 var liquid = actor.getBodyLiquid(liquidId);
+                if (liquid && typeof liquid.amount === 'number' && liquid.amount > 0) hadCum = true;
                 if (liquid && typeof liquid.reset === 'function') liquid.reset();
             }
             if (typeof actor.setCacheChanged === 'function') actor.setCacheChanged();
-            return;
+            return hadCum;
         }
 
-        // Fallback for older liquid systems without BodyLiquidId API.
-        if (typeof actor.resetLiquidsExceptPussyJuice === 'function') {
-            actor.resetLiquidsExceptPussyJuice();
-        }
+        // Legacy fallback: lower body fields only.
+        if (Number(actor._liquidCreampiePussy || 0) > 0) hadCum = true;
+        if (Number(actor._liquidCreampieAnal || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButt || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtTopRight || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtTopLeft || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtBottomRight || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtBottomLeft || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtRight || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeButtLeft || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeLeftLeg || 0) > 0) hadCum = true;
+        if (Number(actor._liquidBukkakeRightLeg || 0) > 0) hadCum = true;
+        actor._liquidCreampiePussy = 0;
+        actor._liquidCreampieAnal = 0;
+        actor._liquidBukkakeButt = 0;
+        actor._liquidBukkakeButtTopRight = 0;
+        actor._liquidBukkakeButtTopLeft = 0;
+        actor._liquidBukkakeButtBottomRight = 0;
+        actor._liquidBukkakeButtBottomLeft = 0;
+        actor._liquidBukkakeButtRight = 0;
+        actor._liquidBukkakeButtLeft = 0;
+        actor._liquidBukkakeLeftLeg = 0;
+        actor._liquidBukkakeRightLeg = 0;
+        if (typeof actor.setCacheChanged === 'function') actor.setCacheChanged();
+        return hadCum;
     };
 
     var tryCharmGoblinInstantSex = function(actor, goblin, forcedTypeKey) {
@@ -489,13 +556,20 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
         if (!charmJoin || !charmJoin.skillId) {
             debugLog(CHARM_ACTION_NAME + ': no valid receptionist pose-join skill for current state.');
             pendingCharmLogReplacementReady = false;
+            pendingCharmLogReplacementLocked = false;
             return false;
         }
         var skillId = charmJoin.skillId;
 
         var resolvedTypeKey = charmJoin.typeKey || forcedTypeKey || getCharmTypeByJoinSkillId(skillId);
-        pendingCharmLogReplacementText = getCharmLogReplacementByType(resolvedTypeKey, actor);
+        var hadLowerBodyCumBeforeCunni = resolvedTypeKey === 'cunni' && actorHasLowerBodySemen(actor);
+        if (resolvedTypeKey === 'cunni' && hadLowerBodyCumBeforeCunni) {
+            pendingCharmLogReplacementText = CHARM_LOG_REPLACEMENT_CUNNI_CLEANUP;
+        } else {
+            pendingCharmLogReplacementText = getCharmLogReplacementByType(resolvedTypeKey, actor);
+        }
         pendingCharmLogReplacementReady = true;
+        pendingCharmLogReplacementLocked = true;
         pendingKickLogReplacementLines = 20;
         selectedGoblin.useAISkill(skillId, actor);
         selectedGoblin._goblinActionCooldown = 1;
@@ -510,7 +584,12 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             actor.updateReceptionistBattleGoblinTachie();
         }
         if (resolvedTypeKey === 'cunni') {
-            clearCumFromActor(actor);
+            var removedLowerBodyCum = clearLowerBodyCumFromActor(actor);
+            if (removedLowerBodyCum) {
+                pendingCharmLogReplacementText = CHARM_LOG_REPLACEMENT_CUNNI_CLEANUP;
+                pendingCharmLogReplacementReady = true;
+                pendingCharmLogReplacementLocked = true;
+            }
         }
 
         debugLog(CHARM_ACTION_NAME + ' triggered instant sex join skill ' + String(skillId) + '.');
@@ -739,8 +818,20 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 if (lastSelectedCharmTypeKey && typeof this.subject === 'function') {
                     var subject = this.subject();
                     if (subject && typeof subject.actorId === 'function') lastSelectedCharmActorId = subject.actorId();
-                    pendingCharmLogReplacementText = getCharmLogReplacementByType(lastSelectedCharmTypeKey, subject);
+                    var actorForCharmLog = subject;
+                    if ((!actorForCharmLog || typeof actorForCharmLog.isActor !== 'function' || !actorForCharmLog.isActor()) &&
+                        typeof $gameActors !== 'undefined' && $gameActors && typeof $gameActors.actor === 'function') {
+                        var karrynActorId = (typeof ACTOR_KARRYN_ID !== 'undefined') ? ACTOR_KARRYN_ID : 1;
+                        actorForCharmLog = $gameActors.actor(karrynActorId);
+                    }
+
+                    if (lastSelectedCharmTypeKey === 'cunni' && actorHasLowerBodySemen(actorForCharmLog)) {
+                        pendingCharmLogReplacementText = CHARM_LOG_REPLACEMENT_CUNNI_CLEANUP;
+                    } else {
+                        pendingCharmLogReplacementText = getCharmLogReplacementByType(lastSelectedCharmTypeKey, actorForCharmLog);
+                    }
                     pendingCharmLogReplacementReady = true;
+                    pendingCharmLogReplacementLocked = true;
                     if (pendingKickLogReplacementLines < 20) pendingKickLogReplacementLines = 20;
                 }
             };
@@ -884,6 +975,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                             if (activeReplacement) {
                                 pendingCharmLogReplacementText = activeReplacement;
                                 pendingCharmLogReplacementReady = true;
+                                pendingCharmLogReplacementLocked = false;
                                 if (pendingKickLogReplacementLines < 20) pendingKickLogReplacementLines = 20;
                                 arguments[1] = pendingCharmLogReplacementText;
                             } else if (pendingKickLogReplacementLines > 0 || pendingCharmLogReplacementReady) {
@@ -915,6 +1007,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 if (replacementText) {
                     pendingCharmLogReplacementText = replacementText;
                     pendingCharmLogReplacementReady = true;
+                    pendingCharmLogReplacementLocked = false;
                     if (pendingKickLogReplacementLines < 20) pendingKickLogReplacementLines = 20;
                     text = pendingCharmLogReplacementText;
                 } else if (pendingKickLogReplacementLines > 0 || pendingCharmLogReplacementReady) {
@@ -927,6 +1020,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 if (/Karryn\s+kicks\s+Karryn\s+away!/i.test(text)) {
                     pendingKickLogReplacementLines = 0;
                     pendingCharmLogReplacementReady = false;
+                    pendingCharmLogReplacementLocked = false;
                     originalAddText.call(this, pendingCharmLogReplacementText);
                     return;
                 }
@@ -974,6 +1068,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             if (isKickAwaySkill && isActorSubject && !currentActionIsCharm && !selfTargeted) {
                 pendingKickLogReplacementLines = 0;
                 pendingCharmLogReplacementReady = false;
+                pendingCharmLogReplacementLocked = false;
             }
 
             // In the malformed charm flow, the action resolves as Kick Away targeting Karryn herself.
@@ -981,6 +1076,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
             if (isKickAwaySkill && isActorSubject && (selfTargeted || currentActionIsCharm || (inCharmReplacementWindow && pendingCharmLogReplacementReady))) {
                 this.push('addText', pendingCharmLogReplacementText);
                 pendingCharmLogReplacementReady = false;
+                pendingCharmLogReplacementLocked = false;
                 return;
             }
             originalDisplayAction.apply(this, arguments);
@@ -1021,6 +1117,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 if (activeReplacement) {
                     pendingKickLogReplacementLines = 0;
                     pendingCharmLogReplacementReady = false;
+                    pendingCharmLogReplacementLocked = false;
                     if (this._logWindow && typeof this._logWindow.displayRemLine === 'function') {
                         this._logWindow.displayRemLine(activeReplacement);
                         return false;
@@ -1028,6 +1125,7 @@ var KarrynsHotDesk = KarrynsHotDesk || {};
                 } else {
                     pendingKickLogReplacementLines = 0;
                     pendingCharmLogReplacementReady = false;
+                    pendingCharmLogReplacementLocked = false;
                 }
             }
             return originalActionRemLines.apply(this, arguments);
